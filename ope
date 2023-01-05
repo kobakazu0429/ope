@@ -1,0 +1,93 @@
+#!/bin/sh
+
+# u: error occured if undefined variable
+# e: exit if error occured
+# set -ue
+
+readonly VAULT_NAME=.env
+
+function usage() {
+  cat << EOS
+ope version 1.0.0
+
+Usage:
+  $ ope [command] [namespace] [arg...]
+
+Command
+  init
+    $ ope init
+    create ".env" vault
+
+  create
+    $ ope create foo ACCESS_KEY ACCESS_TOKEN
+    create item and env keys
+
+  list
+    $ ope list
+    list items
+
+    $ ope list foo
+    list envs in namespace
+
+  run
+    $ ope run foo python3 main.py
+    inject to environment variable
+
+  export
+    $ ope export foo
+    export envs, NOT MASKING !!
+EOS
+}
+
+
+function ope_init() {
+  op vault create $VAULT_NAME
+}
+
+function ope_create() {
+  namespace="$1";shift
+  op item create --vault $VAULT_NAME --title $namespace --category "Secure Note" $(echo "$*" | awk '{for (i=1; i<=NF; i++) printf("%s[password]= ", $i)}')
+}
+
+function ope_list() {
+  if [ $# -eq 0 ]; then
+    op item list --vault $VAULT_NAME --format json | jq -r '.[].title'
+  else
+    namespace="$1";shift
+    op item get --vault $VAULT_NAME --format json $namespace | jq -r '.fields[] | select(.type == "CONCEALED") | [.label, .reference] | join("=")'
+  fi
+}
+
+function ope_run() {
+  namespace="$1";shift
+  OP_ENV=`op item get --vault $VAULT_NAME --format json $namespace | jq -r '[(.fields[] | select(.type == "CONCEALED") | [.label, "\"" + .reference + "\""]) | join("=")] | join(" ")'`
+  env -S"$OP_ENV" op run -- $*
+}
+
+function ope_export() {
+  namespace="$1";shift
+  op item get --vault $VAULT_NAME --format json $namespace | jq -r '.fields[] | select(.type == "CONCEALED") | [.label, .reference] | join("=")' | op inject
+}
+
+subcommand="$1";shift
+
+case $subcommand in
+  init)
+    ope_init $*
+    ;;
+  create)
+    ope_create $*
+    ;;
+  list)
+    ope_list $*
+    ;;
+  run)
+    ope_run $*
+    ;;
+  export)
+    ope_export $*
+    ;;
+  help | *)
+    usage
+    ;;
+esac
