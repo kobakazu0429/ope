@@ -28,7 +28,7 @@ Command
 
   create
     $ ope create foo ACCESS_KEY ACCESS_TOKEN
-    create item and env keys
+    create item and env keys, values are added via App
 
   list
     $ ope list
